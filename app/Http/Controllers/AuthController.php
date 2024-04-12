@@ -1,86 +1,64 @@
 <?php
 
 namespace App\Http\Controllers;
-
-use App\Models\User;
-use Exception;
 use Illuminate\Http\Request;
+
 use Illuminate\Support\Facades\Auth;
-use Tymon\JWTAuth\Facades\JWTAuth;
-use Tymon\JWTAuth\Exceptions\JWTException;
+use App\Models\User;
+use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware('auth:api', ['except' => ['login', 'refresh']]);
+    public function __construct() {
+        $this->middleware('auth:api', ['except' => ['login', 'register']]);
     }
 
-    public function login()
-    {
-        $credentials = request(['email', 'password']);
+    public function login(Request $request){
+    	$validator = Validator::make($request->all(), [
+            'name' => 'required|string',
+            'password' => 'required|string|min:6',
+        ]);
 
-        if (! $token = auth('api')->attempt($credentials)) {
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        if (! $token = Auth::attempt($validator->validated())) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $refreshToken = $this->createRefreshToken();
-
-        return $this->respondWithToken($token, $refreshToken);
+        return $this->createNewToken($token);
     }
 
-    public function profile(){
-        try {
-            return response()->json(auth('api')->user());
-        } catch (JWTException $exception) {
-            return response()->json(['error' => 'Unauthorized'], 401);
-        }
-    }
-
-    public function logout()
-    {
-        auth('api')->logout();
-
-        return response()->json(['message' => 'Successfully logged out']);
-    }
-
-    public function refresh()
-    {
-        $refreshToken = request()->refresh_token;
-        try {
-            $decoded = JWTAuth::getJWTProvider()->decode($refreshToken);
-            $user = User::find($decoded['user_id']);
-            if (!$user) {
-                return response()->json(['error' => "User not found"], 404);
-            }
-            auth('api')->invalidate();
-            $token = auth('api')->login($user);
-            $refreshToken = $this->createRefreshToken();
-            return $this->respondWithToken($token, $refreshToken);
-        } catch (JWTException $exception) {
-            return response()->json(['error' => 'Refresh Token Invalid'], 500);
-        }
-    }
-
-    private function respondWithToken($token, $refreshToken)
-    {
+    protected function createNewToken($token){
         return response()->json([
             'access_token' => $token,
-            'refresh_token' => $refreshToken,
             'token_type' => 'bearer',
-            'expires_in' => auth('api')->factory()->getTTL() * 60
+            'expires_in' => auth()->factory()->getTTL() * 60,
+            'user' => auth()->user()
         ]);
     }
 
-    private function createRefreshToken() {
-        $data = [
-            'user_id' => auth('api')->user()->id,
-            'random' => rand() . time(),
-            'exp' => time() + config('jwt.refresh_ttl')
-        ];
+    public function register(Request $request) {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|between:2,100',
+            'email' => 'required|string|email|max:100|unique:users',
+            'password' => 'required|string|min:6',
+        ]);
 
-        $refreshToken = JWTAuth::getJWTProvider()->encode($data);
+        if($validator->fails()){
+            return response()->json($validator->errors()->toJson(), 400);
+        }
 
-        return $refreshToken;
+        $user = User::create(array_merge(
+                    $validator->validated(),
+                    ['password' => bcrypt($request->password)]
+                ));
+
+        return response()->json([
+            'message' => 'User successfully registered',
+            'user' => $user
+        ], 201);
     }
+
 }
