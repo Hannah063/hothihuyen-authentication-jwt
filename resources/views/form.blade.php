@@ -17,11 +17,11 @@
                 <h1>Account Login</h1>
             </div>
             <div class="form-content">
-                <form action="/login" method="POST">
+                <form action="/api/auth/login" method="POST">
                     @csrf
                     <div class="form-group">
-                        <label for="username">Username</label>
-                        <input id="username" type="text" name="username" required="required" />
+                        <label for="name">Username</label>
+                        <input id="name" type="text" name="name" required="required" />
                     </div>
                     <div class="form-group">
                         <label for="password">Password</label>
